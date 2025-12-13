@@ -24,6 +24,18 @@ class TikTokBot:
         self.redis = RedisClient()
         self.job_to_chat = {}  # Maps job_id to chat_id
     
+    async def safe_edit_message(self, message, text, **kwargs):
+        """Safely edit a message, ignoring 'message not modified' errors"""
+        try:
+            await message.edit_text(text, **kwargs)
+        except Exception as e:
+            error_msg = str(e).lower()
+            if "message is not modified" not in error_msg and "message to edit not found" not in error_msg:
+                logger.error(f"Failed to edit message: {e}")
+                raise
+            else:
+                logger.debug(f"Message edit skipped: {e}")
+    
     async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /start command"""
         welcome_message = (
@@ -117,29 +129,41 @@ class TikTokBot:
                     ]
                     reply_markup = InlineKeyboardMarkup(keyboard)
                     
-                    await processing_msg.edit_text(
-                        f"✅ *Job Created!*\n\n"
-                        f"👤 User: `{username}`\n"
-                        f"🆔 Job ID: `{job_id}`\n"
-                        f"📊 Status: Pending\n\n"
-                        f"I'm now scraping videos from this profile. "
-                        f"This may take a few minutes depending on the number of videos.\n\n"
-                        f"📹 Videos will be sent to you in batches of 5!\n\n"
-                        f"Use the buttons below to check progress!",
-                        parse_mode="Markdown",
-                        reply_markup=reply_markup
-                    )
+                    try:
+                        await processing_msg.edit_text(
+                            f"✅ *Job Created!*\n\n"
+                            f"👤 User: `{username}`\n"
+                            f"🆔 Job ID: `{job_id}`\n"
+                            f"📊 Status: Pending\n\n"
+                            f"I'm now scraping videos from this profile. "
+                            f"This may take a few minutes depending on the number of videos.\n\n"
+                            f"📹 Videos will be sent to you in batches of 5!\n\n"
+                            f"Use the buttons below to check progress!",
+                            parse_mode="Markdown",
+                            reply_markup=reply_markup
+                        )
+                    except Exception as edit_error:
+                        if "message is not modified" not in str(edit_error).lower():
+                            raise
                 else:
-                    await processing_msg.edit_text(
-                        f"❌ Failed to create job: {response.text}"
-                    )
+                    try:
+                        await processing_msg.edit_text(
+                            f"❌ Failed to create job: {response.text}"
+                        )
+                    except Exception as edit_error:
+                        if "message is not modified" not in str(edit_error).lower():
+                            raise
         
         except Exception as e:
             logger.error(f"Error handling username: {e}")
-            await processing_msg.edit_text(
-                f"❌ An error occurred: {str(e)}\n\n"
-                f"Please try again later or contact support."
-            )
+            try:
+                await processing_msg.edit_text(
+                    f"❌ An error occurred: {str(e)}\n\n"
+                    f"Please try again later or contact support."
+                )
+            except Exception as edit_error:
+                if "message is not modified" not in str(edit_error).lower():
+                    logger.error(f"Failed to edit error message: {edit_error}")
     
     async def status_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /status command"""
@@ -255,11 +279,16 @@ class TikTokBot:
                     reply_markup = InlineKeyboardMarkup(keyboard)
                     
                     if edit:
-                        await message.edit_text(
-                            status_text,
-                            parse_mode="Markdown",
-                            reply_markup=reply_markup
-                        )
+                        try:
+                            await message.edit_text(
+                                status_text,
+                                parse_mode="Markdown",
+                                reply_markup=reply_markup
+                            )
+                        except Exception as e:
+                            # Ignore "message not modified" errors
+                            if "message is not modified" not in str(e).lower():
+                                raise
                     else:
                         await message.reply_text(
                             status_text,

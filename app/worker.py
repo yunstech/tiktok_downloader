@@ -102,12 +102,43 @@ class Worker:
                     logger.info(f"Successfully processed scraping job: {job_id}")
                 
                 except Exception as e:
+                    error_msg = str(e)
                     logger.error(f"Failed to scrape videos for job {job_id}: {e}")
+                    
+                    # Provide helpful error message
+                    if "bot" in error_msg.lower() or "empty response" in error_msg.lower():
+                        error_msg = (
+                            "TikTok detected bot activity. Please add TIKTOK_COOKIE to .env file. "
+                            "See GET_COOKIE.md for instructions."
+                        )
+                    
                     await self.redis.update_job(job_id, {
                         "status": "failed",
-                        "error": str(e),
+                        "error": error_msg,
                         "updated_at": datetime.utcnow().isoformat()
                     })
+                    
+                    # Notify user via bot
+                    try:
+                        chat_id_str = await self.redis.client.hget("job_chat_mapping", job_id)
+                        if chat_id_str:
+                            from telegram import Bot
+                            bot = Bot(token=settings.telegram_bot_token)
+                            await bot.send_message(
+                                chat_id=int(chat_id_str),
+                                text=(
+                                    f"❌ *Job Failed*\n\n"
+                                    f"🆔 Job ID: `{job_id}`\n"
+                                    f"👤 User: `{username}`\n\n"
+                                    f"⚠️ Error: {error_msg}\n\n"
+                                    f"💡 *Solution:*\n"
+                                    f"Add your TikTok session cookie to bypass detection.\n"
+                                    f"See the documentation for details."
+                                ),
+                                parse_mode="Markdown"
+                            )
+                    except Exception as notify_error:
+                        logger.error(f"Failed to notify user about error: {notify_error}")
             
             except Exception as e:
                 logger.error(f"Error in scrape worker: {e}")
