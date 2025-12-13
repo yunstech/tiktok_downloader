@@ -47,6 +47,7 @@ services:
     environment:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      - API_BASE_URL=http://api:8000
     volumes:
       - ./.env:/app/.env
     depends_on:

@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     api_host: str = "0.0.0.0"
     api_port: int = 8000
     api_reload: bool = True
+    api_base_url: str = "http://localhost:8000"
     
     # Redis Configuration
     redis_host: str = "localhost"

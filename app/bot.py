@@ -17,9 +17,6 @@ from app.redis_client import RedisClient
 settings = get_settings()
 logger = setup_logger(__name__)
 
-# Base API URL (adjust if needed)
-API_BASE_URL = "http://localhost:8000"
-
 
 class TikTokBot:
     def __init__(self):
@@ -100,7 +97,7 @@ class TikTokBot:
             # Make API request to start scraping
             async with httpx.AsyncClient() as client:
                 response = await client.post(
-                    f"{API_BASE_URL}/scrape",
+                    f"{settings.api_base_url}/scrape",
                     json={"username": username},
                     timeout=30.0
                 )
@@ -161,7 +158,7 @@ class TikTokBot:
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.get(
-                    f"{API_BASE_URL}/jobs",
+                    f"{settings.api_base_url}/jobs",
                     timeout=30.0
                 )
                 
@@ -217,7 +214,7 @@ class TikTokBot:
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.get(
-                    f"{API_BASE_URL}/job/{job_id}",
+                    f"{settings.api_base_url}/job/{job_id}",
                     timeout=30.0
                 )
                 
