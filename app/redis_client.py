@@ -55,6 +55,29 @@ class RedisClient:
         """Get count of pending videos"""
         return await self.client.llen(f"job:{job_id}:pending_videos")
     
+    async def is_video_sent(self, chat_id: int, video_id: str) -> bool:
+        """Check if video has been sent to user"""
+        return await self.client.sismember(f"user:{chat_id}:sent_videos", video_id)
+    
+    async def mark_video_sent(self, chat_id: int, video_id: str):
+        """Mark video as sent to user"""
+        await self.client.sadd(f"user:{chat_id}:sent_videos", video_id)
+        logger.info(f"Marked video {video_id} as sent to user {chat_id}")
+    
+    async def is_video_downloaded(self, video_id: str) -> bool:
+        """Check if video has been downloaded globally"""
+        return await self.client.sismember("downloaded_videos", video_id)
+    
+    async def mark_video_downloaded(self, video_id: str, filepath: str):
+        """Mark video as downloaded globally"""
+        await self.client.sadd("downloaded_videos", video_id)
+        await self.client.hset("video_files", video_id, filepath)
+        logger.info(f"Marked video {video_id} as downloaded")
+    
+    async def get_video_filepath(self, video_id: str) -> str:
+        """Get filepath for a previously downloaded video"""
+        return await self.client.hget("video_files", video_id)
+    
     async def get_job(self, job_id: str) -> dict:
         """Get job data"""
         return await self.client.hgetall(f"job:{job_id}")

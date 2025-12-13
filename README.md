@@ -7,10 +7,12 @@ A powerful TikTok scraper and downloader built with Python FastAPI, Redis, and T
 - 🔍 **Profile Scraping**: Search and scrape all videos from any TikTok user profile
 - ⬇️ **Automatic Downloads**: Videos are automatically downloaded using Redis queue system
 - 📦 **Batch Video Delivery**: Bot automatically sends videos to users in batches of 5
+- 🚫 **Duplicate Prevention**: Tracks downloaded videos and sent videos to prevent duplicates
 - 🤖 **Telegram Bot**: Easy-to-use Telegram bot interface
 - 🚀 **FastAPI Backend**: High-performance REST API
 - 📊 **Job Tracking**: Monitor scraping and download progress in real-time
 - 🔄 **Async Processing**: Concurrent downloads with configurable limits
+- 💾 **Smart Caching**: Reuses already downloaded videos across jobs
 - 🐳 **Docker Support**: Easy deployment with Docker Compose
 
 ## 📋 Prerequisites

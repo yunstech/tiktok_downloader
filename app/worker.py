@@ -157,6 +157,52 @@ class Worker:
                 video_url = video_data.get("video_url")
                 username = video_data.get("username")
                 
+                # Check if video is already downloaded
+                if await self.redis.is_video_downloaded(video_id):
+                    logger.info(f"Video {video_id} already downloaded, reusing existing file")
+                    filepath = await self.redis.get_video_filepath(video_id)
+                    
+                    if not filepath:
+                        logger.warning(f"Downloaded video {video_id} has no filepath, re-downloading")
+                    else:
+                        # Update status to completed (reused)
+                        await self.redis.update_download_status(
+                            job_id, video_id, "completed", 
+                            progress=100, 
+                            file_path=filepath,
+                            reused=True
+                        )
+                        logger.info(f"Reusing existing download for video {video_id}")
+                        
+                        # Add to pending videos for batch sending
+                        await self.redis.add_pending_video(job_id, video_id, filepath)
+                        
+                        # Check if we should send a batch
+                        pending_count = await self.redis.get_pending_video_count(job_id)
+                        if pending_count >= 5:
+                            await self.redis.client.lpush("send_videos_queue", job_id)
+                            logger.info(f"Queued batch send for job {job_id}")
+                        
+                        # Continue to check job completion
+                        stats = await self.redis.get_job_stats(job_id)
+                        job_data = await self.redis.get_job(job_id)
+                        total = int(job_data.get("total_videos", 0))
+                        
+                        if stats["completed"] + stats["failed"] >= total:
+                            await self.redis.update_job(job_id, {
+                                "status": "completed",
+                                "updated_at": datetime.utcnow().isoformat(),
+                                "downloaded_videos": str(stats["completed"]),
+                                "failed_videos": str(stats["failed"])
+                            })
+                            logger.info(f"Job {job_id} completed")
+                            
+                            remaining_count = await self.redis.get_pending_video_count(job_id)
+                            if remaining_count > 0:
+                                await self.redis.client.lpush("send_videos_queue", job_id)
+                                logger.info(f"Queued final batch send for job {job_id}")
+                        return
+                
                 # Update status to downloading
                 await self.redis.update_download_status(
                     job_id, video_id, "downloading", progress=0
@@ -172,6 +218,9 @@ class Worker:
                 filepath = await self.downloader.download_video(
                     video_url, video_id, username, progress_callback
                 )
+                
+                # Mark video as downloaded globally
+                await self.redis.mark_video_downloaded(video_id, filepath)
                 
                 # Update status to completed
                 await self.redis.update_download_status(

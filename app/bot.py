@@ -300,9 +300,17 @@ class TikTokBot:
             
             # Send each video
             sent_count = 0
+            skipped_count = 0
             for video_data in pending_videos:
                 try:
                     video_id, filepath = video_data.split(":", 1)
+                    
+                    # Check if video already sent to this user
+                    if await self.redis.is_video_sent(chat_id, video_id):
+                        logger.info(f"Video {video_id} already sent to user {chat_id}, skipping")
+                        skipped_count += 1
+                        continue
+                    
                     video_path = Path(filepath)
                     
                     if not video_path.exists():
@@ -321,6 +329,9 @@ class TikTokBot:
                             write_timeout=60
                         )
                     
+                    # Mark video as sent
+                    await self.redis.mark_video_sent(chat_id, video_id)
+                    
                     sent_count += 1
                     logger.info(f"Sent video {video_id} to chat {chat_id}")
                     
@@ -332,10 +343,13 @@ class TikTokBot:
                     continue
             
             # Send summary message
-            if sent_count > 0:
+            if sent_count > 0 or skipped_count > 0:
+                summary = f"✅ Sent {sent_count} video(s) from this batch!"
+                if skipped_count > 0:
+                    summary += f"\n⏭️ Skipped {skipped_count} duplicate(s)"
                 await self.application.bot.send_message(
                     chat_id=chat_id,
-                    text=f"✅ Sent {sent_count} video(s) from this batch!",
+                    text=summary,
                     parse_mode="Markdown"
                 )
         
