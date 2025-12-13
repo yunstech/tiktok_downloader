@@ -205,6 +205,9 @@ tiktok-scrapper-download/
 | `REDIS_PORT` | Redis port | `6379` |
 | `TELEGRAM_BOT_TOKEN` | Telegram bot token | Required |
 | `TELEGRAM_ADMIN_IDS` | Comma-separated admin IDs | Optional |
+| `TIKTOK_COOKIE` | TikTok session cookie | Optional (Recommended) |
+| `TIKTOK_PROXY` | Proxy URL | Optional |
+| `TIKTOK_HEADLESS` | Run browser headless | `true` |
 | `DOWNLOAD_PATH` | Path for downloads | `./downloads` |
 | `MAX_CONCURRENT_DOWNLOADS` | Max parallel downloads | `3` |
 | `LOG_LEVEL` | Logging level | `INFO` |
@@ -231,6 +234,34 @@ tiktok-scrapper-download/
 1. Check worker status: `docker-compose logs worker`
 2. Verify Redis is running: `redis-cli ping`
 3. Check download path permissions
+
+### TikTok Bot Detection Errors
+
+**Error:** "TikTok returned an empty response. They are detecting you're a bot"
+
+**Solutions (in order of effectiveness):**
+
+1. **Get TikTok Session Cookie** (Most Reliable):
+   - Login to TikTok in your browser
+   - Open Developer Tools (F12) → Application → Cookies
+   - Copy `sessionid` or `ms_token` value
+   - Add to `.env`: `TIKTOK_COOKIE=your_cookie_here`
+
+2. **Use a Residential Proxy**:
+   - Get a proxy from BrightData, Smartproxy, etc.
+   - Add to `.env`: `TIKTOK_PROXY=http://user:pass@proxy:port`
+
+3. **Disable Headless Mode**:
+   - Add to `.env`: `TIKTOK_HEADLESS=false`
+
+4. **Combine Multiple Methods**:
+   ```bash
+   TIKTOK_COOKIE=your_cookie
+   TIKTOK_PROXY=http://proxy:port
+   TIKTOK_HEADLESS=false
+   ```
+
+See [TIKTOK_DETECTION.md](TIKTOK_DETECTION.md) for detailed troubleshooting.
 
 ### Scraper Errors
 

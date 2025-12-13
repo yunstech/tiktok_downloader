@@ -2,7 +2,7 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install system dependencies including playwright requirements
+# Install system dependencies including playwright requirements and Xvfb for virtual display
 RUN apt-get update && apt-get install -y \
     gcc \
     g++ \
@@ -29,6 +29,9 @@ RUN apt-get update && apt-get install -y \
     libcairo2 \
     libasound2 \
     libatspi2.0-0 \
+    xvfb \
+    x11vnc \
+    fluxbox \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements and install Python dependencies
@@ -40,6 +43,9 @@ RUN playwright install chromium
 
 # Copy application code
 COPY . .
+
+# Make startup script executable
+RUN chmod +x /app/start-worker.sh
 
 # Create downloads directory
 RUN mkdir -p downloads

@@ -33,13 +33,15 @@ services:
     environment:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      - TIKTOK_HEADLESS=${TIKTOK_HEADLESS:-true}
+      - TIKTOK_PROXY=${TIKTOK_PROXY:-}
     volumes:
       - ./downloads:/app/downloads
       - ./.env:/app/.env
     depends_on:
       - redis
     restart: unless-stopped
-    command: python -m app.worker
+    command: bash /app/start-worker.sh
 
   bot:
     build: .

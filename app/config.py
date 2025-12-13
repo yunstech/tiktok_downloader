@@ -21,6 +21,8 @@ class Settings(BaseSettings):
     
     # TikTok Configuration
     tiktok_cookie: str = ""
+    tiktok_proxy: str = ""
+    tiktok_headless: bool = True
     
     # Download Configuration
     download_path: str = "./downloads"

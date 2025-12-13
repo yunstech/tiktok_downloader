@@ -21,11 +21,34 @@ class TikTokScraper:
         try:
             ms_tokens = [settings.tiktok_cookie] if settings.tiktok_cookie else None
             self.api = TikTokApi()
+            
+            # Prepare context options
+            context_options = {
+                "viewport": {"width": 1920, "height": 1080},
+                "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "locale": "en-US",
+                "timezone_id": "America/New_York"
+            }
+            
+            # Add proxy if configured
+            if settings.tiktok_proxy:
+                proxy_parts = settings.tiktok_proxy.split("://")
+                if len(proxy_parts) == 2:
+                    context_options["proxy"] = {
+                        "server": settings.tiktok_proxy
+                    }
+                    logger.info(f"Using proxy: {settings.tiktok_proxy}")
+            
+            # Use configurable headless mode
+            logger.info(f"Initializing TikTok API (headless={settings.tiktok_headless})")
+            
             await self.api.create_sessions(
                 ms_tokens=ms_tokens,
                 num_sessions=1,
                 sleep_after=3,
-                headless=True
+                headless=settings.tiktok_headless,
+                browser="chromium",
+                context_options=context_options
             )
             logger.info("TikTok API initialized successfully")
         except Exception as e:
