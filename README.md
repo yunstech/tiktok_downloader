@@ -2,6 +2,20 @@
 
 A powerful TikTok scraper and downloader built with Python FastAPI, Redis, and Telegram Bot integration. This application allows users to scrape all videos from a TikTok profile and automatically download them.
 
+## ⚠️ IMPORTANT: Cookie Required!
+
+**If you're getting "0 videos" even though profiles load:**
+
+You **MUST** add a valid TikTok session cookie! Without it, TikTok blocks video access.
+
+👉 **[Click here for step-by-step cookie guide](COOKIE_GUIDE.md)** 👈
+
+**Quick fix:**
+1. Go to TikTok.com and **log in**
+2. Press F12 > Application > Cookies > copy `sessionid` value
+3. Add to `.env`: `TIKTOK_COOKIE=your_cookie_here`
+4. Restart: `docker compose restart`
+
 ## 🌟 Features
 
 - 🔍 **Profile Scraping**: Search and scrape all videos from any TikTok user profile
