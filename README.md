@@ -44,11 +44,40 @@ copy .env.example .env
 Edit `.env` and set your values:
 
 ```env
+# Required
 TELEGRAM_BOT_TOKEN=your_bot_token_here
 TELEGRAM_ADMIN_IDS=your_telegram_user_id
+
+# HIGHLY RECOMMENDED for avoiding bot detection
+TIKTOK_COOKIE=your_sessionid_cookie_here
+
+# Optional but helpful
+TIKTOK_HEADLESS=false  # Set to false if getting blocked
+TIKTOK_PROXY=http://your-proxy:port  # Use residential proxy
 ```
 
-### 3. Option A: Run with Docker (Recommended)
+**⚠️ IMPORTANT:** To avoid TikTok bot detection, you MUST add a valid `TIKTOK_COOKIE`. See **[TIKTOK_SETUP.md](TIKTOK_SETUP.md)** for detailed instructions on how to get your cookie.
+
+### 3. Test Your Configuration (Optional but Recommended)
+
+Before starting the full application, test if your TikTok scraper is configured correctly:
+
+```bash
+# If using Docker
+docker compose run --rm worker python test_scraper.py --username tiktok
+
+# If running locally
+python test_scraper.py --username tiktok
+```
+
+This will verify:
+- ✅ Your `TIKTOK_COOKIE` is valid
+- ✅ Playwright can access TikTok
+- ✅ Videos can be scraped successfully
+
+If the test fails, see **[TIKTOK_SETUP.md](TIKTOK_SETUP.md)** for troubleshooting.
+
+### 4. Option A: Run with Docker (Recommended)
 
 ```bash
 # Build and start all services
@@ -61,7 +90,7 @@ docker-compose logs -f
 docker-compose down
 ```
 
-### 3. Option B: Run Locally
+### 4. Option B: Run Locally
 
 #### Install Dependencies
 
