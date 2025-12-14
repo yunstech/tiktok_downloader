@@ -44,22 +44,20 @@ class TikTokHTTPScraper:
                 cookies["sessionid"] = settings.tiktok_cookie
                 logger.info("Using TikTok session cookie")
             
-            # Configure proxy if provided
-            proxies = None
+            # Configure client parameters
+            client_params = {
+                "headers": self.headers,
+                "cookies": cookies,
+                "follow_redirects": True,
+                "timeout": 30.0
+            }
+            
+            # Add proxy if provided (httpx uses 'proxy' not 'proxies')
             if settings.tiktok_proxy:
-                proxies = {
-                    "http://": settings.tiktok_proxy,
-                    "https://": settings.tiktok_proxy
-                }
+                client_params["proxy"] = settings.tiktok_proxy
                 logger.info(f"Using proxy: {settings.tiktok_proxy}")
             
-            self.client = httpx.AsyncClient(
-                headers=self.headers,
-                cookies=cookies,
-                proxies=proxies,
-                follow_redirects=True,
-                timeout=30.0
-            )
+            self.client = httpx.AsyncClient(**client_params)
             logger.info("HTTP scraper initialized successfully")
         except Exception as e:
             logger.error(f"Failed to initialize HTTP scraper: {e}")
