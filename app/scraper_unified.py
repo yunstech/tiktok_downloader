@@ -25,17 +25,33 @@ class UnifiedTikTokScraper:
         
     async def initialize(self):
         """Initialize scrapers - try Playwright first, fallback to HTTP"""
+        # Try both methods, prefer Playwright but don't fail if it doesn't work
+        playwright_error = None
+        
         try:
-            # Try Playwright first
+            # Try Playwright first with timeout
             logger.info("Attempting to initialize Playwright scraper...")
             from app.scraper import TikTokScraper
             self.playwright_scraper = TikTokScraper()
-            await self.playwright_scraper.initialize()
+            
+            # Use asyncio.wait_for to timeout if initialization takes too long
+            await asyncio.wait_for(
+                self.playwright_scraper.initialize(),
+                timeout=30.0  # 30 second timeout
+            )
+            
             self.current_method = 'playwright'
             logger.info("✓ Playwright scraper initialized successfully")
             
+        except asyncio.TimeoutError:
+            playwright_error = "Playwright initialization timed out after 30s"
+            logger.warning(f"Playwright scraper failed: {playwright_error}")
         except Exception as e:
+            playwright_error = str(e)
             logger.warning(f"Playwright scraper failed to initialize: {e}")
+            
+        # If Playwright failed, try HTTP scraper
+        if playwright_error:
             logger.info("Falling back to HTTP scraper...")
             
             try:
@@ -48,7 +64,7 @@ class UnifiedTikTokScraper:
                 
             except Exception as http_error:
                 logger.error(f"HTTP scraper also failed: {http_error}")
-                raise RuntimeError("Failed to initialize any scraper method")
+                raise RuntimeError(f"Failed to initialize any scraper method. Playwright: {playwright_error}, HTTP: {http_error}")
     
     async def close(self):
         """Close all scrapers"""
@@ -86,24 +102,27 @@ class UnifiedTikTokScraper:
         except Exception as e:
             error_msg = str(e).lower()
             
-            # Check if it's a detection/blocking error
+            # Check if it's a detection/blocking error or RuntimeError from retries
             is_blocked = any(keyword in error_msg for keyword in [
                 'empty response', 'blocked', 'captcha', 'bot', 
-                'timeout', 'connection', 'not available'
+                'timeout', 'connection', 'not available', 'could not fetch',
+                'after retries', 'detecting you'
             ])
             
             if is_blocked:
-                logger.warning(f"{operation_name}: Playwright blocked/failed ({e}), switching to HTTP")
+                logger.warning(f"{operation_name}: Playwright blocked/failed, switching to HTTP scraper")
+                logger.info(f"Playwright error: {e}")
                 
                 # Initialize HTTP scraper if not already
                 if not self.http_scraper:
+                    logger.info("Initializing HTTP scraper as fallback...")
                     from app.scraper_http import TikTokHTTPScraper
                     self.http_scraper = TikTokHTTPScraper()
                     await self.http_scraper.initialize()
                 
                 # Switch to HTTP mode
                 self.current_method = 'http'
-                logger.info(f"Switched to HTTP scraper for {operation_name}")
+                logger.info(f"✓ Switched to HTTP scraper for {operation_name}")
                 
                 # Try with HTTP
                 return await http_func()
