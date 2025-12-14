@@ -530,22 +530,30 @@ class TikTokHTTPScraper:
                     logger.warning(f"[HTTP Scraper] Error reading UNIVERSAL_DATA: {e}")
 
             # 2) SIGI_STATE ItemModule (often works when UNIVERSAL does not have videos)
-            if not video_list and sigi:
-                sigi_items = self._extract_videos_from_sigi(sigi, username, max_videos)
-                if sigi_items:
-                    video_list = sigi_items
-                    logger.info(f"[HTTP Scraper] Found {len(video_list)} videos in SIGI_STATE ItemModule")
+            if not video_list:
+                if sigi:
+                    item_module = sigi.get("ItemModule", {})
+                    logger.info(f"[HTTP Scraper] SIGI_STATE present, ItemModule has {len(item_module)} items")
+                    
+                    sigi_items = self._extract_videos_from_sigi(sigi, username, max_videos)
+                    if sigi_items:
+                        video_list = sigi_items
+                        logger.info(f"[HTTP Scraper] ✅ Found {len(video_list)} videos in SIGI_STATE ItemModule")
+                    else:
+                        logger.warning("[HTTP Scraper] SIGI_STATE ItemModule present but no usable items found (possibly filtered by username)")
                 else:
-                    logger.warning("[HTTP Scraper] SIGI_STATE present but ItemModule had no usable items")
+                    logger.warning("[HTTP Scraper] SIGI_STATE not found in HTML")
 
             # 3) HTML link fallback: extract video ids from links
             if not video_list:
                 ids = self._extract_video_ids_from_html_links(html)
                 if ids:
-                    logger.info(f"[HTTP Scraper] Extracted {len(ids)} video ids from HTML links (fallback)")
+                    logger.info(f"[HTTP Scraper] ✅ Extracted {len(ids)} video ids from HTML links (fallback)")
                     if max_videos:
                         ids = ids[:max_videos]
                     video_list = [{"id": vid} for vid in ids]
+                else:
+                    logger.warning("[HTTP Scraper] No video links found in HTML (/@user/video/ID pattern)")
 
             # 4) Last resort: internal API user/posts (best-effort)
             if not video_list and sec_uid:
@@ -595,6 +603,23 @@ class TikTokHTTPScraper:
                     logger.error(f"[HTTP Scraper] Error saving debug files: {e}")
 
                 logger.warning(f"[HTTP Scraper] ⚠️ No videos scraped for @{username}")
+                logger.warning(f"[HTTP Scraper]")
+                logger.warning(f"[HTTP Scraper] 📋 Summary of what was tried:")
+                logger.warning(f"[HTTP Scraper]    ❌ UNIVERSAL_DATA itemList: empty")
+                logger.warning(f"[HTTP Scraper]    ❌ SIGI_STATE ItemModule: empty or not present")
+                logger.warning(f"[HTTP Scraper]    ❌ HTML video links: not found")
+                logger.warning(f"[HTTP Scraper]    ❌ API endpoint: returned empty (missing X-Bogus signature)")
+                logger.warning(f"[HTTP Scraper]")
+                logger.warning(f"[HTTP Scraper] 🔍 Reason: TikTok is withholding video data")
+                logger.warning(f"[HTTP Scraper]    - needFix=true indicates verification/CAPTCHA required")
+                logger.warning(f"[HTTP Scraper]    - Videos are not included in HTML response")
+                logger.warning(f"[HTTP Scraper]    - API requires X-Bogus signature (can't be generated)")
+                logger.warning(f"[HTTP Scraper]")
+                logger.warning(f"[HTTP Scraper] 💡 Solution: Use Playwright scraper")
+                logger.warning(f"[HTTP Scraper]    1. Set valid TIKTOK_COOKIE in .env (from logged-in browser)")
+                logger.warning(f"[HTTP Scraper]    2. Set TIKTOK_HEADLESS=false for better success")
+                logger.warning(f"[HTTP Scraper]    3. Consider using a residential proxy")
+                logger.warning(f"[HTTP Scraper]    4. See COOKIE_GUIDE.md for step-by-step instructions")
                 return []
 
             # Parse into VideoInfo
