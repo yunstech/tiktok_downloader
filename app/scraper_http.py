@@ -53,10 +53,16 @@ class TikTokHTTPScraper:
         Supports:
         - sessionid value only (e.g. "abc123")
         - full cookie header string (e.g. "sessionid=abc; tt_webid_v2=...; ...")
+        - quoted strings (removes surrounding quotes)
         """
         raw = (raw or "").strip()
         if not raw:
             return {}
+        
+        # Remove surrounding quotes if present (common mistake in .env files)
+        if (raw.startswith('"') and raw.endswith('"')) or (raw.startswith("'") and raw.endswith("'")):
+            raw = raw[1:-1].strip()
+            logger.info("[HTTP Scraper] Removed quotes from cookie string")
 
         if ";" in raw and "=" in raw:
             cookies: Dict[str, str] = {}
@@ -75,7 +81,16 @@ class TikTokHTTPScraper:
             cookies: Dict[str, str] = {}
             if settings.tiktok_cookie:
                 cookies = self._parse_cookie(settings.tiktok_cookie)
-                logger.info(f"Using TikTok cookies: {', '.join(list(cookies.keys())[:6])} ...")
+                
+                # Log important cookies
+                important = ["sessionid", "sessionid_ss", "msToken", "tt_chain_token", "sid_tt"]
+                found = [k for k in important if k in cookies]
+                missing = [k for k in important if k not in cookies]
+                
+                logger.info(f"[HTTP Scraper] Using {len(cookies)} TikTok cookies")
+                logger.info(f"[HTTP Scraper] ✅ Important cookies found: {', '.join(found) if found else 'NONE'}")
+                if missing:
+                    logger.warning(f"[HTTP Scraper] ⚠️  Missing important cookies: {', '.join(missing)}")
 
             client_params: Dict[str, Any] = {
                 "headers": self.headers,
@@ -405,7 +420,23 @@ class TikTokHTTPScraper:
                 return [], 0, False
 
             response.raise_for_status()
-            data = response.json()
+            
+            # Check content type first
+            content_type = response.headers.get("content-type", "")
+            if "text/html" in content_type:
+                logger.warning("[HTTP Scraper] API returned HTML instead of JSON - likely CAPTCHA/verification page")
+                logger.warning(f"[HTTP Scraper] Response preview: {response.text[:200]}")
+                return [], 0, False
+            
+            # Try to parse JSON
+            try:
+                data = response.json()
+            except Exception as e:
+                logger.error(f"[HTTP Scraper] Failed to parse API response as JSON: {e}")
+                logger.error(f"[HTTP Scraper] Content-Type: {content_type}")
+                logger.error(f"[HTTP Scraper] Response length: {len(response.text)} bytes")
+                logger.error(f"[HTTP Scraper] Response preview: {response.text[:500]}")
+                return [], 0, False
 
             videos: List[Dict] = []
             has_more = False
