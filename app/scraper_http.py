@@ -147,12 +147,29 @@ class TikTokHTTPScraper:
             
             # Try path 1: webapp.user-detail.itemList
             try:
-                video_list = data["__DEFAULT_SCOPE__"]["webapp.user-detail"]["itemList"]
-                logger.info(f"[HTTP Scraper] Found {len(video_list)} videos in webapp.user-detail.itemList")
-            except (KeyError, TypeError):
-                logger.warning("[HTTP Scraper] Path 1 (webapp.user-detail.itemList) not found")
+                user_detail = data["__DEFAULT_SCOPE__"]["webapp.user-detail"]
+                logger.info(f"[HTTP Scraper] webapp.user-detail keys: {list(user_detail.keys())}")
+                video_list = user_detail.get("itemList", [])
+                if video_list:
+                    logger.info(f"[HTTP Scraper] Found {len(video_list)} videos in webapp.user-detail.itemList")
+                else:
+                    logger.warning("[HTTP Scraper] Path 1 (webapp.user-detail.itemList) is empty")
+            except (KeyError, TypeError) as e:
+                logger.warning(f"[HTTP Scraper] Path 1 (webapp.user-detail) error: {e}")
             
-            # Try path 2: webapp.video-detail
+            # Try path 2: webapp.user-detail.items (alternative path)
+            if not video_list:
+                try:
+                    user_detail = data["__DEFAULT_SCOPE__"]["webapp.user-detail"]
+                    video_list = user_detail.get("items", [])
+                    if video_list:
+                        logger.info(f"[HTTP Scraper] Found {len(video_list)} videos in webapp.user-detail.items")
+                    else:
+                        logger.warning("[HTTP Scraper] Path 2 (webapp.user-detail.items) is empty")
+                except (KeyError, TypeError) as e:
+                    logger.warning(f"[HTTP Scraper] Path 2 error: {e}")
+            
+            # Try path 3: webapp.video-detail
             if not video_list:
                 try:
                     video_detail = data["__DEFAULT_SCOPE__"].get("webapp.video-detail", {})
@@ -160,7 +177,7 @@ class TikTokHTTPScraper:
                         video_list = [video_detail["itemInfo"]["itemStruct"]]
                         logger.info(f"[HTTP Scraper] Found {len(video_list)} videos in webapp.video-detail")
                 except (KeyError, TypeError) as e:
-                    logger.warning(f"[HTTP Scraper] Path 2 (webapp.video-detail) not found: {e}")
+                    logger.warning(f"[HTTP Scraper] Path 3 (webapp.video-detail) not found: {e}")
             
             # If still no videos, log the available keys for debugging
             if not video_list:
