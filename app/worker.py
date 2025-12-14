@@ -75,14 +75,17 @@ class Worker:
                 
                 try:
                     # Scrape user profile
+                    logger.info(f"[Job {job_id}] Fetching profile for @{username}...")
                     profile = await self.scraper.get_user_profile(username)
-                    logger.info(f"Found profile: {profile.nickname} (@{username})")
+                    logger.info(f"[Job {job_id}] ✓ Found profile: {profile.nickname} (@{username}) - {profile.follower_count:,} followers, {profile.video_count} total videos")
                     
                     # Scrape videos
+                    logger.info(f"[Job {job_id}] Starting video scraping (max: {max_videos or 'all'})...")
                     videos = await self.scraper.scrape_user_videos(username, max_videos)
-                    logger.info(f"Scraped {len(videos)} videos for {username}")
+                    logger.info(f"[Job {job_id}] ✓ Scraped {len(videos)} videos for @{username}")
                     
                     # Add videos to download queue
+                    logger.info(f"[Job {job_id}] Queueing {len(videos)} videos for download...")
                     for video in videos:
                         video_data = {
                             "video_id": video.video_id,
@@ -99,7 +102,7 @@ class Worker:
                         "updated_at": datetime.utcnow().isoformat()
                     })
                     
-                    logger.info(f"Successfully processed scraping job: {job_id}")
+                    logger.info(f"[Job {job_id}] ✓ Successfully queued all videos for download - Status: downloading")
                 
                 except Exception as e:
                     error_msg = str(e)
@@ -172,14 +175,14 @@ class Worker:
         """Process a single video download"""
         async with semaphore:
             try:
-                logger.info(f"Downloading video {video_id} for job {job_id}")
+                logger.info(f"[Job {job_id}] 📥 Starting download: {video_id}")
                 
                 # Get video data
                 videos = await self.redis.client.hgetall(f"job:{job_id}:videos")
                 video_data_str = videos.get(video_id)
                 
                 if not video_data_str:
-                    logger.error(f"Video data not found for {video_id}")
+                    logger.error(f"[Job {job_id}] ❌ Video data not found for {video_id}")
                     return
                 
                 # Parse video data
@@ -187,10 +190,13 @@ class Worker:
                 video_data = ast.literal_eval(video_data_str)
                 video_url = video_data.get("video_url")
                 username = video_data.get("username")
+                description = video_data.get("description", "")[:50]
+                
+                logger.info(f"[Job {job_id}] Video: {video_id} - {description}...")
                 
                 # Check if video is already downloaded
                 if await self.redis.is_video_downloaded(video_id):
-                    logger.info(f"Video {video_id} already downloaded, reusing existing file")
+                    logger.info(f"[Job {job_id}] ♻️ Video {video_id} already downloaded, reusing existing file")
                     filepath = await self.redis.get_video_filepath(video_id)
                     
                     if not filepath:
@@ -246,6 +252,7 @@ class Worker:
                     )
                 
                 # Download video
+                logger.info(f"[Job {job_id}] 📥 Downloading from: {video_url[:50]}...")
                 filepath = await self.downloader.download_video(
                     video_url, video_id, username, progress_callback
                 )
@@ -260,22 +267,25 @@ class Worker:
                     file_path=filepath
                 )
                 
-                logger.info(f"Successfully downloaded video {video_id}")
+                logger.info(f"[Job {job_id}] ✅ Successfully downloaded: {video_id} → {filepath}")
                 
                 # Add to pending videos for batch sending
                 await self.redis.add_pending_video(job_id, video_id, filepath)
                 
                 # Check if we should send a batch
                 pending_count = await self.redis.get_pending_video_count(job_id)
+                logger.info(f"[Job {job_id}] 📊 Pending videos for batch send: {pending_count}/5")
                 if pending_count >= 5:
                     # Notify bot to send videos
                     await self.redis.client.lpush("send_videos_queue", job_id)
-                    logger.info(f"Queued batch send for job {job_id}")
+                    logger.info(f"[Job {job_id}] 📤 Queued batch of 5 videos for Telegram send")
                 
                 # Check if all downloads are complete
                 stats = await self.redis.get_job_stats(job_id)
                 job_data = await self.redis.get_job(job_id)
                 total = int(job_data.get("total_videos", 0))
+                
+                logger.info(f"[Job {job_id}] 📊 Progress: {stats['completed']}/{total} completed, {stats['failed']} failed")
                 
                 if stats["completed"] + stats["failed"] >= total:
                     await self.redis.update_job(job_id, {
@@ -284,16 +294,16 @@ class Worker:
                         "downloaded_videos": str(stats["completed"]),
                         "failed_videos": str(stats["failed"])
                     })
-                    logger.info(f"Job {job_id} completed")
+                    logger.info(f"[Job {job_id}] ✅ Job completed! Downloaded: {stats['completed']}, Failed: {stats['failed']}")
                     
                     # Send remaining videos if any
                     remaining_count = await self.redis.get_pending_video_count(job_id)
                     if remaining_count > 0:
                         await self.redis.client.lpush("send_videos_queue", job_id)
-                        logger.info(f"Queued final batch send for job {job_id}")
+                        logger.info(f"[Job {job_id}] 📤 Queued final batch of {remaining_count} videos for Telegram send")
             
             except Exception as e:
-                logger.error(f"Failed to download video {video_id}: {e}")
+                logger.error(f"[Job {job_id}] ❌ Failed to download video {video_id}: {e}")
                 await self.redis.update_download_status(
                     job_id, video_id, "failed", error=str(e)
                 )

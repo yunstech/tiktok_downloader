@@ -35,10 +35,11 @@ class VideoDownloader:
             
             # Skip if already downloaded
             if filepath.exists():
-                logger.info(f"Video {video_id} already exists, skipping download")
+                file_size = filepath.stat().st_size
+                logger.info(f"♻️ Video {video_id} already exists ({file_size:,} bytes), skipping download")
                 return str(filepath)
             
-            logger.info(f"Starting download for video {video_id}")
+            logger.info(f"📥 Starting download: {video_id} → {filepath}")
             
             # Download video
             async with httpx.AsyncClient(follow_redirects=True, timeout=300.0) as client:
@@ -47,7 +48,10 @@ class VideoDownloader:
                     
                     # Get total size if available
                     total_size = int(response.headers.get("content-length", 0))
+                    total_mb = total_size / (1024 * 1024) if total_size > 0 else 0
                     downloaded = 0
+                    
+                    logger.info(f"📊 Video {video_id} size: {total_mb:.2f} MB")
                     
                     # Write to file
                     async with aiofiles.open(filepath, "wb") as f:
@@ -60,7 +64,8 @@ class VideoDownloader:
                                 progress = int((downloaded / total_size) * 100)
                                 await progress_callback(video_id, progress)
             
-            logger.info(f"Successfully downloaded video {video_id} to {filepath}")
+            final_size = filepath.stat().st_size
+            logger.info(f"✅ Downloaded {video_id}: {final_size:,} bytes → {filepath}")
             return str(filepath)
         
         except Exception as e:

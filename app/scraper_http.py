@@ -89,12 +89,14 @@ class TikTokHTTPScraper:
         """Get user profile information"""
         try:
             url = f"https://www.tiktok.com/@{username}"
-            logger.info(f"Fetching profile: {url}")
+            logger.info(f"[HTTP Scraper] Fetching profile: {url}")
             
             response = await self.client.get(url)
             response.raise_for_status()
+            logger.info(f"[HTTP Scraper] Got response: {response.status_code}, Content-Length: {len(response.text)}")
             
             # Extract data from hidden JSON
+            logger.info(f"[HTTP Scraper] Extracting JSON data from HTML...")
             data = self.extract_json_data(response.text)
             user_data = data["__DEFAULT_SCOPE__"]["webapp.user-detail"]["userInfo"]
             
@@ -113,7 +115,7 @@ class TikTokHTTPScraper:
                 video_count=stats.get("videoCount", 0)
             )
             
-            logger.info(f"Retrieved profile for user: {username}")
+            logger.info(f"[HTTP Scraper] ✓ Retrieved profile: @{username} ({profile.nickname}) - {profile.follower_count:,} followers, {profile.video_count} videos")
             return profile
         
         except Exception as e:
@@ -128,24 +130,30 @@ class TikTokHTTPScraper:
         """Scrape videos from a user's profile"""
         try:
             url = f"https://www.tiktok.com/@{username}"
-            logger.info(f"Scraping videos from: {url}")
+            logger.info(f"[HTTP Scraper] Scraping videos from: {url}")
+            if max_videos:
+                logger.info(f"[HTTP Scraper] Max videos to scrape: {max_videos}")
             
             response = await self.client.get(url)
             response.raise_for_status()
+            logger.info(f"[HTTP Scraper] Got response: {response.status_code}")
             
             # Extract data
+            logger.info(f"[HTTP Scraper] Extracting video data from HTML...")
             data = self.extract_json_data(response.text)
             
             # Try to get video list from user detail
             try:
                 video_list = data["__DEFAULT_SCOPE__"]["webapp.user-detail"]["itemList"]
+                logger.info(f"[HTTP Scraper] Found {len(video_list)} videos in user detail")
             except KeyError:
-                logger.warning("No videos found in user detail, trying alternative method")
+                logger.warning("[HTTP Scraper] No videos found in user detail, trying alternative method")
                 video_list = []
             
             videos = []
             count = 0
             
+            logger.info(f"[HTTP Scraper] Starting to parse videos...")
             for video_data in video_list:
                 try:
                     # Parse video data
@@ -166,15 +174,17 @@ class TikTokHTTPScraper:
                     count += 1
                     
                     if max_videos and count >= max_videos:
+                        logger.info(f"[HTTP Scraper] Reached max videos limit ({max_videos})")
                         break
                     
-                    logger.info(f"Scraped video {count}: {video_info.video_id}")
+                    desc_preview = video_info.description[:50] if video_info.description else "No description"
+                    logger.info(f"[HTTP Scraper] ✓ Video {count}/{len(video_list)}: {video_info.video_id} - {desc_preview}... ({video_info.view_count:,} views)")
                 
                 except Exception as e:
-                    logger.error(f"Failed to parse video: {e}")
+                    logger.error(f"[HTTP Scraper] Failed to parse video: {e}")
                     continue
             
-            logger.info(f"Scraped {len(videos)} videos for user: {username}")
+            logger.info(f"[HTTP Scraper] ✓ Successfully scraped {len(videos)} videos for user: @{username}")
             return videos
         
         except Exception as e:
