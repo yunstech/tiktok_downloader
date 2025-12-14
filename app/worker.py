@@ -26,7 +26,10 @@ class Worker:
             await self.scraper.initialize()
             self.running = True
             
-            logger.info("Worker started successfully")
+            logger.info(f"✅ Worker started successfully - Using: {self.scraper.current_method.upper()} scraper")
+            if self.scraper.current_method == 'http':
+                logger.warning("⚠️  HTTP scraper has pagination limitations (~30 videos max)")
+                logger.warning("💡 For better results, add TIKTOK_COOKIE to .env file")
             
             # Run both scraping and downloading workers concurrently
             await asyncio.gather(
@@ -88,8 +91,17 @@ class Worker:
                     
                     # Scrape videos
                     logger.info(f"[Job {job_id}] Starting video scraping (max: {max_videos or 'all'})...")
+                    logger.info(f"[Job {job_id}] 🔍 Using scraper method: {self.scraper.current_method or 'not set'}")
                     all_videos = await self.scraper.scrape_user_videos(username, max_videos)
                     logger.info(f"[Job {job_id}] ✓ Scraped {len(all_videos)} videos for @{username}")
+                    
+                    # Log warning if 0 videos found
+                    if len(all_videos) == 0:
+                        logger.warning(f"[Job {job_id}] ⚠️  No videos found! This could mean:")
+                        logger.warning(f"[Job {job_id}]     - User has no videos or account is private")
+                        logger.warning(f"[Job {job_id}]     - HTTP scraper is being used (pagination limited to ~30 videos)")
+                        logger.warning(f"[Job {job_id}]     - TikTok is blocking the request")
+                        logger.warning(f"[Job {job_id}]     💡 Try: Set TIKTOK_COOKIE in .env for better results")
                     
                     # Filter out already-cached videos (keep only new ones)
                     video_ids = [v.video_id for v in all_videos]
