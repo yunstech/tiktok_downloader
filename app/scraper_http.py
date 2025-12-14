@@ -122,6 +122,52 @@ class TikTokHTTPScraper:
             logger.error(f"Failed to get user profile for {username}: {e}")
             raise
     
+    async def _fetch_videos_via_api(
+        self, 
+        sec_uid: str, 
+        cursor: int = 0, 
+        count: int = 30
+    ) -> tuple[List[Dict], int, bool]:
+        """
+        Fetch videos using TikTok's internal API
+        Returns: (videos, cursor, has_more)
+        """
+        try:
+            # TikTok's API endpoint for user videos
+            api_url = "https://www.tiktok.com/api/post/item_list/"
+            
+            params = {
+                "secUid": sec_uid,
+                "count": count,
+                "cursor": cursor,
+                "type": 1,  # User videos
+                "region": "US",
+                "priority_region": "",
+            }
+            
+            logger.info(f"[HTTP Scraper] Calling TikTok API: cursor={cursor}, count={count}")
+            
+            response = await self.client.get(api_url, params=params)
+            response.raise_for_status()
+            
+            data = response.json()
+            
+            if data.get("statusCode") != 0:
+                logger.error(f"[HTTP Scraper] API error: {data.get('statusMsg', 'Unknown error')}")
+                return [], 0, False
+            
+            videos = data.get("itemList", [])
+            has_more = data.get("hasMore", False)
+            next_cursor = data.get("cursor", 0)
+            
+            logger.info(f"[HTTP Scraper] API returned {len(videos)} videos, hasMore={has_more}, nextCursor={next_cursor}")
+            
+            return videos, next_cursor, has_more
+        
+        except Exception as e:
+            logger.error(f"[HTTP Scraper] Failed to fetch videos via API: {e}")
+            return [], 0, False
+
     async def scrape_user_videos(
         self, 
         username: str, 
@@ -142,7 +188,16 @@ class TikTokHTTPScraper:
             logger.info(f"[HTTP Scraper] Extracting video data from HTML...")
             data = self.extract_json_data(response.text)
             
-            # Try multiple paths to find videos
+            # Get user's secUid for API calls
+            sec_uid = None
+            try:
+                user_detail = data["__DEFAULT_SCOPE__"]["webapp.user-detail"]
+                sec_uid = user_detail["userInfo"]["user"]["secUid"]
+                logger.info(f"[HTTP Scraper] Found secUid: {sec_uid}")
+            except (KeyError, TypeError) as e:
+                logger.warning(f"[HTTP Scraper] Could not extract secUid: {e}")
+            
+            # Try multiple paths to find videos in HTML
             video_list = []
             
             # Try path 1: webapp.user-detail.itemList
@@ -179,6 +234,33 @@ class TikTokHTTPScraper:
                 except (KeyError, TypeError) as e:
                     logger.warning(f"[HTTP Scraper] Path 3 (webapp.video-detail) not found: {e}")
             
+            # If no videos found in HTML, try the API approach
+            if not video_list and sec_uid:
+                logger.info("[HTTP Scraper] No videos in HTML, attempting to fetch via API...")
+                cursor = 0
+                has_more = True
+                videos_to_fetch = max_videos if max_videos else 100  # Fetch up to 100 if no limit
+                
+                while has_more and len(video_list) < videos_to_fetch:
+                    api_videos, cursor, has_more = await self._fetch_videos_via_api(
+                        sec_uid, 
+                        cursor=cursor,
+                        count=min(30, videos_to_fetch - len(video_list))
+                    )
+                    
+                    if not api_videos:
+                        break
+                    
+                    video_list.extend(api_videos)
+                    logger.info(f"[HTTP Scraper] Total videos fetched from API: {len(video_list)}")
+                    
+                    if max_videos and len(video_list) >= max_videos:
+                        video_list = video_list[:max_videos]
+                        break
+                    
+                    # Small delay to avoid rate limiting
+                    await asyncio.sleep(0.5)
+            
             # If still no videos, log the available keys for debugging
             if not video_list:
                 try:
@@ -200,6 +282,7 @@ class TikTokHTTPScraper:
                 logger.info(f"[HTTP Scraper] Starting to parse {len(video_list)} videos...")
             else:
                 logger.warning("[HTTP Scraper] No videos found to parse")
+            
             for video_data in video_list:
                 try:
                     # Parse video data
@@ -232,11 +315,14 @@ class TikTokHTTPScraper:
             
             if len(videos) == 0:
                 logger.warning(f"[HTTP Scraper] ⚠️ No videos scraped for @{username}")
-                logger.warning("[HTTP Scraper] Note: HTTP scraper can only get videos from initial page load (~30 videos)")
-                logger.warning("[HTTP Scraper] TikTok loads more videos via API calls (pagination)")
-                logger.warning("[HTTP Scraper] For more videos, consider:")
-                logger.warning("[HTTP Scraper]   1. Add TIKTOK_COOKIE to improve Playwright success")
-                logger.warning("[HTTP Scraper]   2. Use a residential proxy")
+                logger.warning("[HTTP Scraper] This could mean:")
+                logger.warning("[HTTP Scraper]   1. User has no videos or account is private")
+                logger.warning("[HTTP Scraper]   2. TikTok is blocking the request (try adding a valid cookie)")
+                logger.warning("[HTTP Scraper]   3. TikTok has changed their data structure")
+                logger.warning("[HTTP Scraper] Suggestions:")
+                logger.warning("[HTTP Scraper]   - Add a valid TIKTOK_COOKIE to .env")
+                logger.warning("[HTTP Scraper]   - Use a residential proxy")
+                logger.warning("[HTTP Scraper]   - Try the Playwright scraper instead")
             else:
                 logger.info(f"[HTTP Scraper] ✓ Successfully scraped {len(videos)} videos for user: @{username}")
             
