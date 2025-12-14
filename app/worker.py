@@ -1,7 +1,7 @@
 import asyncio
 from datetime import datetime
 from app.redis_client import RedisClient
-from app.scraper import TikTokScraper
+from app.scraper_unified import UnifiedTikTokScraper
 from app.downloader import VideoDownloader
 from app.logger import setup_logger
 from app.config import get_settings
@@ -13,7 +13,7 @@ logger = setup_logger(__name__)
 class Worker:
     def __init__(self):
         self.redis = RedisClient()
-        self.scraper = TikTokScraper()
+        self.scraper = UnifiedTikTokScraper()  # Use unified scraper with fallback
         self.downloader = VideoDownloader()
         self.running = False
     

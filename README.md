@@ -8,6 +8,8 @@ A powerful TikTok scraper and downloader built with Python FastAPI, Redis, and T
 - ⬇️ **Automatic Downloads**: Videos are automatically downloaded using Redis queue system
 - 📦 **Batch Video Delivery**: Bot automatically sends videos to users in batches of 5
 - 🚫 **Duplicate Prevention**: Tracks downloaded videos and sent videos to prevent duplicates
+- 🔄 **Dual Scraping Methods**: Playwright (primary) + HTTP scraper (fallback) for reliability
+- 🛡️ **Anti-Detection**: Automatic fallback when blocked, cookie & proxy support
 - 🤖 **Telegram Bot**: Easy-to-use Telegram bot interface
 - 🚀 **FastAPI Backend**: High-performance REST API
 - 📊 **Job Tracking**: Monitor scraping and download progress in real-time
@@ -176,21 +178,25 @@ GET http://localhost:8000/jobs
 tiktok-scrapper-download/
 ├── app/
 │   ├── __init__.py
-│   ├── main.py          # FastAPI application
-│   ├── bot.py           # Telegram bot
-│   ├── worker.py        # Background worker
-│   ├── scraper.py       # TikTok scraper
-│   ├── downloader.py    # Video downloader
-│   ├── redis_client.py  # Redis client
-│   ├── config.py        # Configuration
-│   ├── models.py        # Data models
-│   └── logger.py        # Logging setup
-├── downloads/           # Downloaded videos
-├── requirements.txt     # Python dependencies
-├── docker-compose.yml   # Docker Compose config
-├── Dockerfile          # Docker image
-├── .env.example        # Example environment variables
-└── README.md           # This file
+│   ├── main.py             # FastAPI application
+│   ├── bot.py              # Telegram bot
+│   ├── worker.py           # Background worker
+│   ├── scraper.py          # TikTok scraper (Playwright)
+│   ├── scraper_http.py     # HTTP scraper (fallback)
+│   ├── scraper_unified.py  # Unified scraper with auto-fallback
+│   ├── downloader.py       # Video downloader
+│   ├── redis_client.py     # Redis client
+│   ├── config.py           # Configuration
+│   ├── models.py           # Data models
+│   └── logger.py           # Logging setup
+├── downloads/              # Downloaded videos
+├── requirements.txt        # Python dependencies
+├── docker-compose.yml      # Docker Compose config
+├── Dockerfile              # Docker image
+├── .env.example            # Example environment variables
+├── README.md               # Main documentation
+├── SCRAPER_FALLBACK.md     # Scraper fallback system docs
+└── TIKTOK_DETECTION.md     # Bot detection troubleshooting
 ```
 
 ## ⚙️ Configuration
@@ -239,29 +245,36 @@ tiktok-scrapper-download/
 
 **Error:** "TikTok returned an empty response. They are detecting you're a bot"
 
+**Good News:** The scraper has **automatic fallback**! If the Playwright method gets blocked, it automatically switches to HTTP scraping method.
+
 **Solutions (in order of effectiveness):**
 
-1. **Get TikTok Session Cookie** (Most Reliable):
+1. **Automatic Fallback (Already Built-in!)**:
+   - The scraper will automatically try HTTP method if Playwright fails
+   - See [SCRAPER_FALLBACK.md](SCRAPER_FALLBACK.md) for details
+   - No action needed - just check logs to see which method is used
+
+2. **Get TikTok Session Cookie** (Improves Both Methods):
    - Login to TikTok in your browser
    - Open Developer Tools (F12) → Application → Cookies
    - Copy `sessionid` or `ms_token` value
    - Add to `.env`: `TIKTOK_COOKIE=your_cookie_here`
 
-2. **Use a Residential Proxy**:
+3. **Use a Residential Proxy**:
    - Get a proxy from BrightData, Smartproxy, etc.
    - Add to `.env`: `TIKTOK_PROXY=http://user:pass@proxy:port`
 
-3. **Disable Headless Mode**:
+4. **Disable Headless Mode**:
    - Add to `.env`: `TIKTOK_HEADLESS=false`
 
-4. **Combine Multiple Methods**:
+5. **Combine Multiple Methods**:
    ```bash
    TIKTOK_COOKIE=your_cookie
    TIKTOK_PROXY=http://proxy:port
    TIKTOK_HEADLESS=false
    ```
 
-See [TIKTOK_DETECTION.md](TIKTOK_DETECTION.md) for detailed troubleshooting.
+See [TIKTOK_DETECTION.md](TIKTOK_DETECTION.md) and [SCRAPER_FALLBACK.md](SCRAPER_FALLBACK.md) for detailed troubleshooting.
 
 ### Scraper Errors
 
