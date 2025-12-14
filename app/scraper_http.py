@@ -142,18 +142,47 @@ class TikTokHTTPScraper:
             logger.info(f"[HTTP Scraper] Extracting video data from HTML...")
             data = self.extract_json_data(response.text)
             
-            # Try to get video list from user detail
+            # Try multiple paths to find videos
+            video_list = []
+            
+            # Try path 1: webapp.user-detail.itemList
             try:
                 video_list = data["__DEFAULT_SCOPE__"]["webapp.user-detail"]["itemList"]
-                logger.info(f"[HTTP Scraper] Found {len(video_list)} videos in user detail")
-            except KeyError:
-                logger.warning("[HTTP Scraper] No videos found in user detail, trying alternative method")
-                video_list = []
+                logger.info(f"[HTTP Scraper] Found {len(video_list)} videos in webapp.user-detail.itemList")
+            except (KeyError, TypeError):
+                logger.warning("[HTTP Scraper] Path 1 (webapp.user-detail.itemList) not found")
+            
+            # Try path 2: webapp.video-detail
+            if not video_list:
+                try:
+                    video_detail = data["__DEFAULT_SCOPE__"].get("webapp.video-detail", {})
+                    if video_detail and "itemInfo" in video_detail:
+                        video_list = [video_detail["itemInfo"]["itemStruct"]]
+                        logger.info(f"[HTTP Scraper] Found {len(video_list)} videos in webapp.video-detail")
+                except (KeyError, TypeError) as e:
+                    logger.warning(f"[HTTP Scraper] Path 2 (webapp.video-detail) not found: {e}")
+            
+            # If still no videos, log the available keys for debugging
+            if not video_list:
+                try:
+                    default_scope = data.get("__DEFAULT_SCOPE__", {})
+                    available_keys = list(default_scope.keys())
+                    logger.warning(f"[HTTP Scraper] No videos found. Available keys: {available_keys[:10]}")
+                    
+                    # Try to find any key with 'video' or 'item' in it
+                    video_keys = [k for k in available_keys if 'video' in k.lower() or 'item' in k.lower()]
+                    if video_keys:
+                        logger.info(f"[HTTP Scraper] Found potential video keys: {video_keys}")
+                except Exception as e:
+                    logger.error(f"[HTTP Scraper] Error exploring data structure: {e}")
             
             videos = []
             count = 0
             
-            logger.info(f"[HTTP Scraper] Starting to parse videos...")
+            if video_list:
+                logger.info(f"[HTTP Scraper] Starting to parse {len(video_list)} videos...")
+            else:
+                logger.warning("[HTTP Scraper] No videos found to parse")
             for video_data in video_list:
                 try:
                     # Parse video data
@@ -184,7 +213,16 @@ class TikTokHTTPScraper:
                     logger.error(f"[HTTP Scraper] Failed to parse video: {e}")
                     continue
             
-            logger.info(f"[HTTP Scraper] ✓ Successfully scraped {len(videos)} videos for user: @{username}")
+            if len(videos) == 0:
+                logger.warning(f"[HTTP Scraper] ⚠️ No videos scraped for @{username}")
+                logger.warning("[HTTP Scraper] Note: HTTP scraper can only get videos from initial page load (~30 videos)")
+                logger.warning("[HTTP Scraper] TikTok loads more videos via API calls (pagination)")
+                logger.warning("[HTTP Scraper] For more videos, consider:")
+                logger.warning("[HTTP Scraper]   1. Add TIKTOK_COOKIE to improve Playwright success")
+                logger.warning("[HTTP Scraper]   2. Use a residential proxy")
+            else:
+                logger.info(f"[HTTP Scraper] ✓ Successfully scraped {len(videos)} videos for user: @{username}")
+            
             return videos
         
         except Exception as e:

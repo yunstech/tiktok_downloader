@@ -3,6 +3,7 @@ from datetime import datetime
 from app.redis_client import RedisClient
 from app.scraper_unified import UnifiedTikTokScraper
 from app.downloader import VideoDownloader
+from app.video_cache import get_video_cache
 from app.logger import setup_logger
 from app.config import get_settings
 
@@ -15,6 +16,7 @@ class Worker:
         self.redis = RedisClient()
         self.scraper = UnifiedTikTokScraper()  # Use unified scraper with fallback
         self.downloader = VideoDownloader()
+        self.video_cache = get_video_cache()  # Video cache for avoiding re-scraping
         self.running = False
     
     async def start(self):
@@ -74,6 +76,11 @@ class Worker:
                 })
                 
                 try:
+                    # Check cache
+                    cache_stats = self.video_cache.get_cache_stats(username)
+                    if cache_stats["has_cache"]:
+                        logger.info(f"[Job {job_id}] 📦 Found cache for @{username}: {cache_stats['total_cached']} videos (last updated: {cache_stats['last_updated']})")
+                    
                     # Scrape user profile
                     logger.info(f"[Job {job_id}] Fetching profile for @{username}...")
                     profile = await self.scraper.get_user_profile(username)
@@ -81,11 +88,24 @@ class Worker:
                     
                     # Scrape videos
                     logger.info(f"[Job {job_id}] Starting video scraping (max: {max_videos or 'all'})...")
-                    videos = await self.scraper.scrape_user_videos(username, max_videos)
-                    logger.info(f"[Job {job_id}] ✓ Scraped {len(videos)} videos for @{username}")
+                    all_videos = await self.scraper.scrape_user_videos(username, max_videos)
+                    logger.info(f"[Job {job_id}] ✓ Scraped {len(all_videos)} videos for @{username}")
                     
-                    # Add videos to download queue
-                    logger.info(f"[Job {job_id}] Queueing {len(videos)} videos for download...")
+                    # Filter out already-cached videos (keep only new ones)
+                    video_ids = [v.video_id for v in all_videos]
+                    new_video_ids = self.video_cache.filter_new_videos(username, video_ids)
+                    
+                    # Filter videos list to only new ones
+                    videos = [v for v in all_videos if v.video_id in new_video_ids]
+                    
+                    if len(videos) < len(all_videos):
+                        logger.info(f"[Job {job_id}] 🔄 Filtered: {len(videos)} new videos, {len(all_videos) - len(videos)} already cached")
+                    
+                    # Update cache with all video IDs (including old ones)
+                    self.video_cache.add_videos(username, video_ids)
+                    
+                    # Add only new videos to download queue
+                    logger.info(f"[Job {job_id}] Queueing {len(videos)} new videos for download...")
                     for video in videos:
                         video_data = {
                             "video_id": video.video_id,
