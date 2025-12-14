@@ -133,37 +133,65 @@ class TikTokHTTPScraper:
         Returns: (videos, cursor, has_more)
         """
         try:
-            # TikTok's API endpoint for user videos
-            api_url = "https://www.tiktok.com/api/post/item_list/"
+            # Try the newer API endpoint format
+            api_url = f"https://www.tiktok.com/api/user/posts"
             
             params = {
                 "secUid": sec_uid,
-                "count": count,
-                "cursor": cursor,
-                "type": 1,  # User videos
-                "region": "US",
-                "priority_region": "",
+                "count": str(count),
+                "cursor": str(cursor),
             }
             
-            logger.info(f"[HTTP Scraper] Calling TikTok API: cursor={cursor}, count={count}")
+            # Add additional headers that TikTok might expect
+            headers = {
+                "Accept": "application/json, text/plain, */*",
+                "Accept-Language": "en-US,en;q=0.9",
+                "Referer": f"https://www.tiktok.com/@user",
+                "X-Requested-With": "XMLHttpRequest",
+            }
             
-            response = await self.client.get(api_url, params=params)
+            logger.info(f"[HTTP Scraper] Calling TikTok API: {api_url} (cursor={cursor}, count={count})")
+            
+            response = await self.client.get(api_url, params=params, headers=headers)
+            
+            # Log response details for debugging
+            logger.info(f"[HTTP Scraper] API response status: {response.status_code}")
+            
+            if response.status_code == 400:
+                logger.warning(f"[HTTP Scraper] API returned 400 Bad Request - TikTok may have changed their API")
+                logger.warning(f"[HTTP Scraper] Response text: {response.text[:500]}")
+                return [], 0, False
+            
             response.raise_for_status()
             
             data = response.json()
             
-            if data.get("statusCode") != 0:
-                logger.error(f"[HTTP Scraper] API error: {data.get('statusMsg', 'Unknown error')}")
-                return [], 0, False
+            # Try different response structures
+            videos = []
+            has_more = False
+            next_cursor = 0
             
-            videos = data.get("itemList", [])
-            has_more = data.get("hasMore", False)
-            next_cursor = data.get("cursor", 0)
+            # Structure 1: Direct itemList
+            if "itemList" in data:
+                videos = data["itemList"]
+                has_more = data.get("hasMore", False)
+                next_cursor = data.get("cursor", 0)
+            # Structure 2: Nested in data
+            elif "data" in data:
+                videos = data["data"].get("itemList", data["data"].get("items", []))
+                has_more = data["data"].get("hasMore", False)
+                next_cursor = data["data"].get("cursor", 0)
             
             logger.info(f"[HTTP Scraper] API returned {len(videos)} videos, hasMore={has_more}, nextCursor={next_cursor}")
             
             return videos, next_cursor, has_more
         
+        except httpx.HTTPStatusError as e:
+            logger.error(f"[HTTP Scraper] API HTTP error {e.response.status_code}: {e}")
+            if e.response.status_code == 400:
+                logger.warning("[HTTP Scraper] TikTok API returned 400 - This endpoint may not work without proper authentication")
+                logger.warning("[HTTP Scraper] Recommendation: Use a valid TIKTOK_COOKIE or try the Playwright scraper")
+            return [], 0, False
         except Exception as e:
             logger.error(f"[HTTP Scraper] Failed to fetch videos via API: {e}")
             return [], 0, False
@@ -272,6 +300,18 @@ class TikTokHTTPScraper:
                     video_keys = [k for k in available_keys if 'video' in k.lower() or 'item' in k.lower()]
                     if video_keys:
                         logger.info(f"[HTTP Scraper] Found potential video keys: {video_keys}")
+                    
+                    # Dump the full structure to a file for analysis
+                    import os
+                    debug_dir = "downloads/.debug"
+                    os.makedirs(debug_dir, exist_ok=True)
+                    debug_file = os.path.join(debug_dir, f"{username}_json_structure.json")
+                    
+                    with open(debug_file, "w", encoding="utf-8") as f:
+                        json.dump(data, f, indent=2, ensure_ascii=False)
+                    
+                    logger.info(f"[HTTP Scraper] 📁 Saved full JSON structure to: {debug_file}")
+                    logger.info(f"[HTTP Scraper] You can examine this file to understand TikTok's data structure")
                 except Exception as e:
                     logger.error(f"[HTTP Scraper] Error exploring data structure: {e}")
             
